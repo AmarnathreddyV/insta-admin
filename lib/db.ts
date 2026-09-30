@@ -1,19 +1,19 @@
 import { Pool } from "pg";
 
-const globalForPg = globalThis as unknown as {
-  influencerPool?: Pool;
+const globalForDb = globalThis as unknown as {
+  pool?: Pool;
 };
 
 export const pool =
-  globalForPg.influencerPool ||
+  globalForDb.pool ??
   new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: {
       rejectUnauthorized: false,
     },
-    max: 3,
+    max: 5,
   });
 
 if (process.env.NODE_ENV !== "production") {
-  globalForPg.influencerPool = pool;
+  globalForDb.pool = pool;
 }
