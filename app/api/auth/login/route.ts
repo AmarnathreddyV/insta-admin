@@ -1,35 +1,56 @@
 import { NextResponse } from "next/server";
-import { createSession, COOKIE_NAME } from "../../../../../lib/auth";
+import { createSession, COOKIE_NAME } from "../../../../lib/auth";
 
 export async function POST(request: Request) {
   try {
-    const { email, password } = await request.json();
+    const body = await request.json();
 
-    const expectedEmail = process.env.ADMIN_EMAIL;
-    const expectedPassword = process.env.ADMIN_PASSWORD;
+    const password = body?.password;
 
-    if (!expectedEmail || !expectedPassword) {
+    if (!password) {
       return NextResponse.json(
-        { success: false, message: "Admin credentials are not configured." },
+        {
+          success: false,
+          message: "Password is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const adminPassword = process.env.ADMIN_PASSWORD;
+
+    if (!adminPassword) {
+      console.error("ADMIN_PASSWORD is not configured.");
+
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Admin authentication is not configured.",
+        },
         { status: 500 }
       );
     }
 
-    if (email !== expectedEmail || password !== expectedPassword) {
+    if (password !== adminPassword) {
       return NextResponse.json(
-        { success: false, message: "Invalid admin credentials." },
+        {
+          success: false,
+          message: "Incorrect password.",
+        },
         { status: 401 }
       );
     }
 
+    const session = createSession();
+
     const response = NextResponse.json({
       success: true,
-      email,
+      message: "Login successful.",
     });
 
     response.cookies.set({
       name: COOKIE_NAME,
-      value: createSession(email),
+      value: session,
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
@@ -38,10 +59,15 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch {
+  } catch (error) {
+    console.error("Login error:", error);
+
     return NextResponse.json(
-      { success: false, message: "Invalid request." },
-      { status: 400 }
+      {
+        success: false,
+        message: "Unable to login.",
+      },
+      { status: 500 }
     );
   }
 }
