@@ -1,55 +1,82 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import crypto from "crypto";
 import { cookies } from "next/headers";
 
-const COOKIE_NAME = "ia_admin_session";
+const COOKIE_NAME = "admin_session";
 
-function secret() {
-  const value = process.env.ADMIN_SESSION_SECRET;
-  if (!value) throw new Error("ADMIN_SESSION_SECRET is missing");
-  return value;
+function getSecret() {
+  const secret = process.env.ADMIN_SESSION_SECRET;
+
+  if (!secret) {
+    throw new Error("ADMIN_SESSION_SECRET is not configured.");
+  }
+
+  return secret;
 }
 
-function sign(payload: string) {
-  return createHmac("sha256", secret())
+function createSignature(payload: string) {
+  return crypto
+    .createHmac("sha256", getSecret())
     .update(payload)
-    .digest("base64url");
+    .digest("hex");
 }
 
-export function createSession(email: string) {
-  const expires = Date.now() + 1000 * 60 * 60 * 24;
-  const payload = `${email}|${expires}`;
-  return `${Buffer.from(payload).toString("base64url")}.${sign(payload)}`;
+export function createSession() {
+  const payload = Buffer.from(
+    JSON.stringify({
+      authenticated: true,
+      createdAt: Date.now(),
+    })
+  ).toString("base64url");
+
+  const signature = createSignature(payload);
+
+  return `${payload}.${signature}`;
 }
 
-export function verifySession(token: string | undefined) {
-  if (!token) return null;
+export function verifySession(value: string | undefined) {
+  if (!value) {
+    return false;
+  }
 
-  const [encoded, signature] = token.split(".");
-  if (!encoded || !signature) return null;
+  const parts = value.split(".");
+
+  if (parts.length !== 2) {
+    return false;
+  }
+
+  const [payload, signature] = parts;
+
+  const expectedSignature = createSignature(payload);
+
+  if (signature.length !== expectedSignature.length) {
+    return false;
+  }
+
+  const valid = crypto.timingSafeEqual(
+    Buffer.from(signature),
+    Buffer.from(expectedSignature)
+  );
+
+  if (!valid) {
+    return false;
+  }
 
   try {
-    const payload = Buffer.from(encoded, "base64url").toString("utf8");
-    const expected = sign(payload);
+    const decoded = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8")
+    );
 
-    const a = Buffer.from(signature);
-    const b = Buffer.from(expected);
-    if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
-
-    const separator = payload.lastIndexOf("|");
-    const email = payload.slice(0, separator);
-    const expires = Number(payload.slice(separator + 1));
-
-    if (!email || !expires || Date.now() > expires) return null;
-
-    return { email, expires };
+    return decoded.authenticated === true;
   } catch {
-    return null;
+    return false;
   }
 }
 
-export async function getAdminSession() {
-  const store = await cookies();
-  return verifySession(store.get(COOKIE_NAME)?.value);
+export async function isAdminAuthenticated() {
+  const cookieStore = await cookies();
+  const session = cookieStore.get(COOKIE_NAME)?.value;
+
+  return verifySession(session);
 }
 
 export { COOKIE_NAME };
