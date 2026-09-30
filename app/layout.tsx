@@ -1,8 +1,9 @@
+import type { Metadata } from "next";
 import "./globals.css";
 
-export const metadata = {
-  title: "Influencer Analytics | Admin",
-  description: "Private influencer analytics administration dashboard.",
+export const metadata: Metadata = {
+  title: "Influencer Analytics Admin",
+  description: "Admin dashboard for influencer analytics",
 };
 
 export default function RootLayout({
